@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مهارات إنتاج البيانات الضخمة - جامعة المنصورة</title>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; margin:0; padding:0; color:#333; }
+  .container { max-width:900px; margin: 20px auto; background:white; padding:20px; border-radius:12px; box-shadow:0 0 20px rgba(0,0,0,0.1); }
+  .header { text-align:center; margin-bottom:30px; }
+  .header img { max-width:120px; }
+  .header h1 { color:#1e3c72; margin-top:10px; }
+  .btn { background:#1e3c72; color:white; padding:12px 25px; border:none; border-radius:6px; font-size:16px; cursor:pointer; margin:5px; }
+  .btn:hover { background:#2a5298; }
+  .input-field { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:6px; font-size:16px; }
+  .hidden { display:none; }
+  .progress-bar { background:#e0e0e0; border-radius:10px; height:20px; margin:20px 0; overflow:hidden; }
+  .progress-fill { background:#1e3c72; height:100%; width:0%; border-radius:10px; transition: width 0.4s; }
+  .question-block { background:#f9fafb; padding:15px; margin:10px 0; border-radius:8px; border:1px solid #e1e5eb; }
+  .likert { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .likert label { margin-left:15px; }
+  .skill-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap:15px; }
+  .skill-card { border:2px solid #1e3c72; padding:15px; text-align:center; border-radius:10px; background:#eef2f7; }
+  .skill-card.locked { opacity:0.6; pointer-events:none; }
+  .support-icon { position:fixed; bottom:20px; left:20px; width:60px; height:60px; border-radius:50%; background:#ff9800; color:white; font-size:24px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.2); z-index:999; }
+  .support-panel { position:fixed; bottom:90px; left:20px; width:300px; max-height:400px; background:white; border-radius:12px; box-shadow:0 0 15px rgba(0,0,0,0.2); padding:15px; display:none; z-index:998; overflow-y:auto; }
+  .chat-msg { background:#f1f1f1; padding:8px; border-radius:12px; margin:5px 0; }
+  .user-msg { background:#1e3c72; color:white; text-align:left; }
+  .timer { color:#c0392b; font-weight:bold; }
+  .csv-download { text-align:center; margin-top:30px; }
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <!-- شاشة الترحيب والتسجيل -->
+  <div id="welcome-screen">
+    <div class="header">
+      <h1>برنامج مهارات إنتاج البيانات الضخمة</h1>
+      <p>كلية التربية - قسم تكنولوجيا التعليم - جامعة المنصورة</p>
+      <hr>
+    </div>
+    <div>
+      <label>الاسم الثلاثي</label>
+      <input type="text" id="teacherName" class="input-field" placeholder="أدخل اسمك الكامل">
+      <label>اسم المدرسة</label>
+      <input type="text" id="schoolName" class="input-field" placeholder="اسم المدرسة">
+      <p style="color:#888;">لا حاجة لإدخال بريد إلكتروني</p>
+      <button class="btn" onclick="startTraining()">ابدأ التدريب</button>
+    </div>
+    <div id="expiryMsg" class="timer" style="text-align:center; margin-top:10px;"></div>
+  </div>
+
+  <!-- شاشة التطبيق القبلي -->
+  <div id="pretest-screen" class="hidden">
+    <h2>الاختبارات القبلية</h2>
+    <div class="progress-bar"><div class="progress-fill" id="pretestProgress"></div></div>
+    <div id="styleScale"></div>
+    <button class="btn hidden" id="startAchievementBtn" onclick="startAchievementTest()">التالي: الاختبار التحصيلي</button>
+    <div id="achievementTest" class="hidden"></div>
+    <button class="btn hidden" id="startSkillScaleBtn" onclick="startSkillScale()">التالي: مقياس المهارات</button>
+    <div id="skillScale" class="hidden"></div>
+    <button class="btn hidden" id="finishPretestBtn" onclick="finishPretest()">إنهاء التطبيق القبلي والانتقال للتدريب</button>
+  </div>
+
+  <!-- شاشة التدريب -->
+  <div id="training-screen" class="hidden">
+    <h2>محاور التدريب على مهارات إنتاج البيانات الضخمة</h2>
+    <div class="progress-bar"><div class="progress-fill" id="trainingProgress"></div></div>
+    <div class="skill-grid" id="skillCards"></div>
+    <div id="skillContent" class="hidden"></div>
+  </div>
+
+  <!-- شاشة التطبيق البعدي -->
+  <div id="posttest-screen" class="hidden">
+    <h2>الاختبارات البعدية</h2>
+    <div id="postAchievement"></div>
+    <div id="postSkillScale"></div>
+    <div id="cognitiveLoadScale"></div>
+    <button class="btn hidden" id="downloadCsvBtn" onclick="downloadCSV()">تحميل النتائج CSV</button>
+  </div>
+</div>
+
+<!-- أيقونة الدعم -->
+<div class="support-icon" id="supportIcon" onclick="toggleSupport()">💬</div>
+<div class="support-panel" id="supportPanel"></div>
+
+<script>
+// ========== الإعدادات العامة ==========
+const EXPIRY_DATE = new Date('2026-12-31'); // تاريخ انتهاء التدريب (يمكن تغييره)
+let currentUser = { name:'', school:'', id:'', group:'', learningStyle:'', pretestAchievement:0, pretestSkill:0, postAchievement:0, postSkill:0, cognitiveLoad:0, interactions:0 };
+let trainingStep = 0;
+let currentSkillIndex = 0;
+const TOTAL_SKILLS = 7;
+
+// ========== الأدوات (30 فقرة لكل مقياس، اختيار من متعدد للاختبار) ==========
+// مقياس أسلوب التعلم (30 فقرة ليكرت)
+const learningStyleItems = Array.from({length:30}, (_,i) => `أفضل حفظ المعلومات كما هي دون تحليل عميق. (${i+1})`);
+// أسئلة الاختبار التحصيلي (30 سؤال MC)
+const achievementQuestions = Array.from({length:30}, (_,i) => ({
+  q:`سؤال تحصيلي رقم ${i+1}: ما هو تعريف البيانات الضخمة؟`,
+  options:['خيار أ','خيار ب','خيار ج','خيار د'],
+  correct:0
+}));
+// مقياس مهارات إنتاج البيانات الضخمة (30 فقرة ليكرت)
+const skillScaleItems = Array.from({length:30}, (_,i) => `أستطيع جمع البيانات من مصادر متعددة بكفاءة. (${i+1})`);
+// مقياس الحمل المعرفي (30 فقرة ليكرت)
+const cognitiveLoadItems = Array.from({length:30}, (_,i) => `شعرت أن المهمة تتطلب مجهوداً ذهنياً كبيراً. (${i+1})`);
+
+// محتوى المهارات السبع (بسيط)
+const skills = [
+  {title:'جمع البيانات الضخمة', content:'<h3>جمع البيانات</h3><p>فيديو تدريبي قصير...</p>'},
+  {title:'توليد البيانات', content:'<h3>توليد البيانات</h3><p>محاكاة تفاعلية...</p>'},
+  {title:'معالجة البيانات الأولية', content:'<h3>معالجة البيانات</h3><p>تنظيف البيانات...</p>'},
+  {title:'تخزين البيانات الضخمة', content:'<h3>تخزين البيانات</h3><p>طرق التخزين السحابي...</p>'},
+  {title:'استخدام تقنيات وأدوات البيانات الضخمة', content:'<h3>الأدوات</h3><p>Google Colab...</p>'},
+  {title:'ضمان جودة البيانات', content:'<h3>جودة البيانات</h3><p>التحقق من الدقة...</p>'},
+  {title:'التفكير التحليلي والتقني', content:'<h3>التفكير التحليلي</h3><p>تحليل الأنماط...</p>'}
+];
+
+// ========== دوال مساعدة ==========
+function generateUserId() { return 'U' + Date.now() + Math.floor(Math.random()*1000); }
+function saveData() { localStorage.setItem('bd_user', JSON.stringify(currentUser)); }
+function loadData() { const d=localStorage.getItem('bd_user'); if(d) currentUser=JSON.parse(d); }
+function shuffleArray(arr) { for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function renderLikertScale(items, containerId, callback, existingAnswers=[]) {
+  let html = '';
+  items.forEach((item, idx) => {
+    const val = existingAnswers[idx] || '';
+    html += `<div class="question-block"><p>${item}</p><div class="likert">`;
+    ['موافق بشدة','موافق','محايد','غير موافق','غير موافق بشدة'].forEach((opt,oi)=>{
+      html += `<label><input type="radio" name="q${idx}" value="${oi}" ${val==oi?'checked':''} onchange="saveScaleAnswer('${containerId}', ${idx}, ${oi})"> ${opt}</label>`;
+    });
+    html += `</div></div>`;
+  });
+  document.getElementById(containerId).innerHTML = html;
+}
+function saveScaleAnswer(containerId, idx, value) {
+  if(containerId==='styleScale') currentUser.styleAnswers = currentUser.styleAnswers || [];
+  else if(containerId==='skillScale') currentUser.skillAnswers = currentUser.skillAnswers || [];
+  else if(containerId==='postSkillScale') currentUser.postSkillAnswers = currentUser.postSkillAnswers || [];
+  else if(containerId==='cognitiveLoadScale') currentUser.cogAnswers = currentUser.cogAnswers || [];
+}
+function computeScore(answers) { return answers.reduce((a,b)=>a+(parseInt(b)||0),0); }
+
+// ========== المراحل ==========
+function startTraining() {
+  const name = document.getElementById('teacherName').value.trim();
+  const school = document.getElementById('schoolName').value.trim();
+  if(!name || !school) { alert('يرجى إدخال الاسم والمدرسة'); return; }
+  if(new Date() > EXPIRY_DATE) { alert('انتهت فترة التدريب المحددة'); return; }
+  currentUser.name = name;
+  currentUser.school = school;
+  currentUser.id = generateUserId();
+  // توزيع عشوائي على مجموعتي الدعم
+  currentUser.group = Math.random() < 0.5 ? 'chatbot' : 'sources';
+  saveData();
+  document.getElementById('welcome-screen').classList.add('hidden');
+  document.getElementById('pretest-screen').classList.remove('hidden');
+  renderStyleScale();
+}
+
+function renderStyleScale() {
+  renderLikertScale(learningStyleItems, 'styleScale', null);
+  document.getElementById('startAchievementBtn').classList.remove('hidden');
+}
+
+function startAchievementTest() {
+  // جمع إجابات مقياس الأسلوب وتصنيف
+  const answers = Array.from(document.querySelectorAll('#styleScale input[type=radio]:checked')).map(r=>r.value);
+  if(answers.length < 30) { alert('يرجى إكمال جميع فقرات المقياس'); return; }
+  currentUser.styleAnswers = answers;
+  const score = computeScore(answers);
+  currentUser.learningStyle = score <= 75 ? 'سطحي' : 'عميق';
+  saveData();
+  document.getElementById('styleScale').classList.add('hidden');
+  document.getElementById('startAchievementBtn').classList.add('hidden');
+  renderAchievementTest();
+}
+
+function renderAchievementTest() {
+  const shuffled = shuffleArray([...achievementQuestions]);
+  let html = '<h3>الاختبار التحصيلي (30 سؤال)</h3>';
+  shuffled.forEach((item, idx) => {
+    html += `<div class="question-block"><p>${item.q}</p>`;
+    item.options.forEach((opt, oi)=>{
+      html += `<label><input type="radio" name="ach${idx}" value="${oi}"> ${opt}</label><br>`;
+    });
+    html += `</div>`;
+  });
+  document.getElementById('achievementTest').innerHTML = html;
+  document.getElementById('achievementTest').classList.remove('hidden');
+  document.getElementById('startSkillScaleBtn').classList.remove('hidden');
+}
+
+function startSkillScale() {
+  const answers = [];
+  for(let i=0;i<30;i++) {
+    const selected = document.querySelector(`input[name="ach${i}"]:checked`);
+    if(!selected) { alert('يرجى إكمال الاختبار كاملاً'); return; }
+    answers.push(selected.value);
+  }
+  currentUser.pretestAchievement = answers.filter((v,i)=> v == achievementQuestions[i].correct).length;
+  document.getElementById('achievementTest').classList.add('hidden');
+  document.getElementById('startSkillScaleBtn').classList.add('hidden');
+  renderLikertScale(skillScaleItems, 'skillScale');
+  document.getElementById('finishPretestBtn').classList.remove('hidden');
+}
+
+function finishPretest() {
+  const answers = Array.from(document.querySelectorAll('#skillScale input[type=radio]:checked')).map(r=>r.value);
+  if(answers.length < 30) { alert('يرجى إكمال المقياس'); return; }
+  currentUser.pretestSkill = computeScore(answers);
+  saveData();
+  document.getElementById('pretest-screen').classList.add('hidden');
+  document.getElementById('training-screen').classList.remove('hidden');
+  renderSkillCards();
+  updateSupportIcon();
+}
+
+function renderSkillCards() {
+  let html = '';
+  skills.forEach((s,i) => {
+    const locked = i > currentSkillIndex ? 'locked' : '';
+    html += `<div class="skill-card ${locked}" onclick="openSkill(${i})">${s.title}</div>`;
+  });
+  document.getElementById('skillCards').innerHTML = html;
+}
+
+function openSkill(index) {
+  if(index > currentSkillIndex) return;
+  currentSkillIndex = index;
+  const skill = skills[index];
+  document.getElementById('skillContent').innerHTML = `<h3>${skill.title}</h3>${skill.content}
+    <button class="btn" onclick="completeSkill()">إنهاء هذه المهارة</button>`;
+  document.getElementById('skillContent').classList.remove('hidden');
+}
+
+function completeSkill() {
+  currentUser.interactions++;
+  if(currentSkillIndex < TOTAL_SKILLS-1) {
+    currentSkillIndex++;
+    renderSkillCards();
+    document.getElementById('skillContent').classList.add('hidden');
+  } else {
+    alert('أحسنت! أنهيت جميع المهارات. انتقل إلى التطبيق البعدي.');
+    document.getElementById('training-screen').classList.add('hidden');
+    document.getElementById('posttest-screen').classList.remove('hidden');
+    startPostTests();
+  }
+  updateProgress();
+}
+
+function startPostTests() {
+  renderAchievementPost();
+}
+
+function renderAchievementPost() {
+  const shuffled = shuffleArray([...achievementQuestions]);
+  let html = '<h3>الاختبار التحصيلي البعدي</h3>';
+  shuffled.forEach((item, idx) => {
+    html += `<div class="question-block"><p>${item.q}</p>`;
+    item.options.forEach((opt, oi)=> html += `<label><input type="radio" name="postach${idx}" value="${oi}"> ${opt}</label><br>`);
+    html += `</div>`;
+  });
+  html += `<button class="btn" onclick="submitPostAchievement()">إرسال الاختبار</button>`;
+  document.getElementById('postAchievement').innerHTML = html;
+}
+
+function submitPostAchievement() {
+  let score = 0;
+  for(let i=0;i<30;i++) {
+    const sel = document.querySelector(`input[name="postach${i}"]:checked`);
+    if(sel && sel.value == achievementQuestions[i].correct) score++;
+  }
+  currentUser.postAchievement = score;
+  document.getElementById('postAchievement').classList.add('hidden');
+  renderLikertScale(skillScaleItems, 'postSkillScale');
+  document.getElementById('postSkillScale').innerHTML += `<button class="btn" onclick="submitPostSkill()">إرسال مقياس المهارات</button>`;
+}
+
+function submitPostSkill() {
+  const answers = Array.from(document.querySelectorAll('#postSkillScale input[type=radio]:checked')).map(r=>r.value);
+  if(answers.length<30) { alert('أكمل المقياس'); return; }
+  currentUser.postSkill = computeScore(answers);
+  document.getElementById('postSkillScale').classList.add('hidden');
+  renderLikertScale(cognitiveLoadItems, 'cognitiveLoadScale');
+  document.getElementById('cognitiveLoadScale').innerHTML += `<button class="btn" onclick="submitCognitiveLoad()">إرسال مقياس الحمل المعرفي</button>`;
+}
+
+function submitCognitiveLoad() {
+  const answers = Array.from(document.querySelectorAll('#cognitiveLoadScale input[type=radio]:checked')).map(r=>r.value);
+  if(answers.length<30) { alert('أكمل المقياس'); return; }
+  currentUser.cognitiveLoad = computeScore(answers);
+  saveData();
+  document.getElementById('cognitiveLoadScale').classList.add('hidden');
+  document.getElementById('downloadCsvBtn').classList.remove('hidden');
+}
+
+function downloadCSV() {
+  const u = currentUser;
+  let csv = 'المعرف,الاسم,المدرسة,المجموعة,أسلوب التعلم,تحصيلي قبلي,مهارات قبلي,تحصيلي بعدي,مهارات بعدي,حمل معرفي,تفاعلات\n';
+  csv += `${u.id},${u.name},${u.school},${u.group},${u.learningStyle},${u.pretestAchievement},${u.pretestSkill},${u.postAchievement},${u.postSkill},${u.cognitiveLoad},${u.interactions}\n`;
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bigdata_results_${u.id}.csv`;
+  a.click();
+}
+
+// ========== نظام الدعم ==========
+function updateSupportIcon() {
+  const icon = document.getElementById('supportIcon');
+  icon.textContent = currentUser.group === 'chatbot' ? '💬' : '📚';
+  icon.title = currentUser.group === 'chatbot' ? 'روبوت الدردشة' : 'مصادر المعرفة';
+}
+
+function toggleSupport() {
+  const panel = document.getElementById('supportPanel');
+  if(panel.style.display === 'block') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  if(currentUser.group === 'chatbot') renderChatbot();
+  else renderSources();
+}
+
+function renderChatbot() {
+  let html = '<h4>روبوت الدردشة</h4><div id="chatMessages"></div>';
+  html += '<input id="chatInput" class="input-field" placeholder="اسأل عن المهارات..."><button class="btn" onclick="sendChat()">إرسال</button>';
+  document.getElementById('supportPanel').innerHTML = html;
+}
+
+function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if(!msg) return;
+  const chatDiv = document.getElementById('chatMessages');
+  chatDiv.innerHTML += `<div class="chat-msg user-msg">${msg}</div>`;
+  // ردود بسيطة حسب الأسلوب
+  let reply = 'يمكنك تجربة التدريب على المهارات السبعة.';
+  if(currentUser.learningStyle==='سطحي') reply = 'إليك الخطوات المختصرة: 1. جمع البيانات 2. تنظيفها...';
+  else reply = 'حاول التفكير في مصادر بيانات إضافية لتحليلها.';
+  chatDiv.innerHTML += `<div class="chat-msg">${reply}</div>`;
+  input.value = '';
+  currentUser.interactions++;
+  saveData();
+}
+
+function renderSources() {
+  let html = '<h4>مصادر موثوقة</h4><ul>';
+  html += '<li><a href="#">دليل المعلم للبيانات (PDF)</a></li>';
+  html += '<li><a href="#">فيديو: مقدمة في البيانات الضخمة</a></li>';
+  html += '</ul>';
+  document.getElementById('supportPanel').innerHTML = html;
+}
+
+// ========== شريط التقدم ==========
+function updateProgress() {
+  const prog = (currentSkillIndex / TOTAL_SKILLS)*100;
+  document.getElementById('trainingProgress').style.width = prog + '%';
+}
+
+// ========== تحميل البيانات عند البداية ==========
+window.onload = function() {
+  loadData();
+  if(currentUser.id) {
+    // استئناف ممكن ولكن للتبسيط نعيد للتسجيل
+    localStorage.clear();
+  }
+  const expMsg = document.getElementById('expiryMsg');
+  expMsg.textContent = `التدريب متاح حتى ${EXPIRY_DATE.toLocaleDateString('ar-EG')}`;
+};
+</script>
+</body>
+</html>
